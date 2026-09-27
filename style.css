@@ -1,0 +1,78 @@
+:root{
+  --ink:#102033;--navy:#17324d;--cream:#f2eadb;--tile:#e5ddcf;--blue:#59b9d3;--teal:#62c7b7;
+  --red:#e85d58;--yellow:#f3c85b;--white:#fffdf8;--dark:#28313b;--shadow:#07111b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:"Courier New",monospace;background:var(--ink);color:var(--white)}
+body{background:
+linear-gradient(rgba(10,24,39,.92),rgba(10,24,39,.92)),
+repeating-linear-gradient(0deg,#efe8dc 0,#efe8dc 31px,#d5caba 32px)}
+button,input{font:inherit}
+button{border:3px solid var(--shadow);box-shadow:4px 4px 0 var(--shadow);padding:14px 18px;font-weight:800;cursor:pointer;background:var(--blue);color:var(--ink)}
+button:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--shadow)}
+button.ghost{background:var(--cream)}
+button.primary{background:var(--yellow)}
+button.tiny{padding:8px 10px}
+input{width:100%;padding:14px;border:3px solid var(--shadow);background:white;color:var(--ink)}
+label{display:grid;gap:7px;font-size:.85rem;font-weight:800;letter-spacing:.08em}
+.screen{display:none;min-height:100vh;padding:24px}
+.screen.active{display:flex}
+.hidden{display:none!important}
+#home{align-items:center;justify-content:center;gap:28px;flex-wrap:wrap}
+.hero{max-width:560px}
+.logo-mark{font-size:72px;filter:drop-shadow(4px 4px 0 var(--shadow))}
+.logo-mark.small{font-size:40px}
+.eyebrow{font-size:.8rem;letter-spacing:.14em;font-weight:900;color:var(--teal)}
+h1{font-size:clamp(3rem,8vw,6rem);line-height:.84;margin:10px 0;text-shadow:6px 6px 0 var(--shadow)}
+h1 span{color:var(--yellow)}
+.tagline{font-size:1.1rem}
+.home-card,.panel,.role-card,.end-card{background:var(--cream);color:var(--ink);border:5px solid var(--shadow);box-shadow:9px 9px 0 var(--shadow)}
+.home-card{width:min(420px,100%);padding:24px;display:grid;gap:14px}
+.divider{display:flex;align-items:center;gap:12px;color:#64707a}.divider:before,.divider:after{content:"";height:2px;flex:1;background:#98a0a6}
+.status{min-height:1.2em;text-align:center;font-weight:800}
+.topbar{position:fixed;inset:0 0 auto 0;padding:12px 18px;background:var(--shadow);display:flex;justify-content:space-between;align-items:center;z-index:20}
+#lobby{padding-top:90px;align-items:center;justify-content:center}
+.lobby-grid{display:grid;grid-template-columns:1.4fr .8fr;gap:20px;width:min(1000px,100%)}
+.panel{padding:24px}
+.player-list{display:grid;gap:10px;margin-top:18px}
+.player-row{display:flex;justify-content:space-between;padding:12px;border:3px solid var(--ink);background:white}
+.player-row.ready{background:#dff7ef}
+.lobby-actions{align-self:start}
+#role{align-items:center;justify-content:center}
+.role-card{width:min(620px,100%);padding:34px;text-align:center}
+.role-card.sab{background:#351b23;color:white}
+.role-icon{font-size:64px}
+.game-screen{padding:95px 16px 30px;flex-direction:column;align-items:center}
+.hud{position:fixed;inset:0 0 auto 0;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--shadow);padding:8px;z-index:30}
+.hud-box{border:2px solid #42596f;padding:8px;text-align:center}
+.hud-box span{display:block;font-size:.7rem;color:#a9c0d3}.hud-box strong{font-size:1.2rem}
+.clean-box strong{color:var(--teal)}.ruin-box strong{color:#ff7973}.timer-box strong{color:var(--yellow)}
+.laundromat-scene{width:min(1050px,100%);background:var(--tile);color:var(--ink);border:5px solid var(--shadow);box-shadow:8px 8px 0 var(--shadow);padding:16px;overflow:hidden}
+.sign{text-align:center;background:var(--navy);color:white;padding:8px;border:3px solid var(--shadow);letter-spacing:.12em}
+.machine-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+.machine{background:#aebdc3;border:4px solid var(--shadow);min-height:120px;padding:10px;text-align:center;display:grid;place-items:center}
+.machine small{font-weight:900}.door{width:65px;height:65px;border:7px solid #3b4650;border-radius:50%;display:grid;place-items:center;background:#75a2b1;color:#d9f7ff;font-size:30px}
+.spin{animation:spin 3s linear infinite}.vending{background:#d76560;color:white;font-size:1.2rem;font-weight:900}
+.avatars{display:flex;justify-content:center;gap:10px;min-height:60px;align-items:end}
+.avatar{font-size:34px;position:relative}.avatar span{display:block;font-size:.6rem;background:white;border:2px solid var(--shadow);padding:2px 4px;white-space:nowrap}
+.belt-wrap{display:grid;grid-template-columns:1fr 110px;gap:0;align-items:stretch}
+.belt{height:150px;border:5px solid var(--shadow);background:#3e4850;position:relative;overflow:hidden}
+.belt-lines{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0,transparent 47px,rgba(255,255,255,.08) 48px,rgba(255,255,255,.08) 50px);animation:belt 1.2s linear infinite}
+.garment{position:absolute;left:42%;top:34px;min-width:190px;text-align:center;background:white;border:4px solid var(--shadow);padding:20px 14px;font-size:1.1rem;font-weight:900;z-index:2;animation:bob .5s alternate infinite}
+.garment.suspicious{background:var(--yellow);animation:warning .25s alternate infinite}
+.garment.empty{opacity:.75}.washer-mouth{border:5px solid var(--shadow);border-left:0;background:var(--navy);color:white;display:grid;place-items:center;text-align:center;font-weight:900}
+.suspicion{margin-top:10px;background:var(--red);color:white;padding:9px;border:3px solid var(--shadow);text-align:center;font-weight:900}
+.control-panel{width:min(1050px,100%);margin-top:16px;background:rgba(8,16,24,.65);padding:14px;border:3px solid #415162}
+.control-title{text-align:center;margin:0 0 10px;font-weight:900;letter-spacing:.08em}.red-text{color:#ff8d86}
+.sort-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.sort.white{background:white}.sort.dark{background:#242a30;color:white}.sort.colors{background:var(--teal)}.pull{background:var(--red);color:white}
+.sab-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.sab-grid button{background:#57222a;color:white}
+.game-footer{width:min(1050px,100%);display:flex;justify-content:space-between;gap:20px;align-items:center}.mini-players{display:flex;flex-wrap:wrap;gap:7px}.mini-chip{background:#203247;border:2px solid #4d6781;padding:5px 8px;font-size:.75rem}
+#end{align-items:center;justify-content:center}.end-card{width:min(650px,100%);padding:34px;text-align:center}.reveal{background:var(--ink);color:white;padding:20px;margin:20px 0}.reveal strong{display:block;color:var(--yellow);font-size:1.8rem;margin-top:8px}
+dialog{width:min(620px,calc(100% - 30px));border:5px solid var(--shadow);box-shadow:9px 9px 0 var(--shadow);background:var(--cream);color:var(--ink);padding:24px}
+dialog::backdrop{background:rgba(0,0,0,.75)}.rules-head{display:flex;align-items:center;gap:15px}.rules-head h2{margin:0}dialog li{margin:12px 0;line-height:1.4}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes belt{to{transform:translateX(50px)}}@keyframes bob{to{transform:translateY(5px)}}@keyframes warning{to{transform:scale(1.04) rotate(1deg)}}
+@media(max-width:760px){
+  .lobby-grid{grid-template-columns:1fr}.hud{grid-template-columns:repeat(2,1fr)}.game-screen{padding-top:145px}
+  .machine-row{grid-template-columns:repeat(2,1fr)}.sort-grid{grid-template-columns:repeat(2,1fr)}.sab-grid{grid-template-columns:1fr}
+  .belt-wrap{grid-template-columns:1fr 75px}.garment{left:18%;min-width:160px}.game-footer{flex-direction:column}
+}
