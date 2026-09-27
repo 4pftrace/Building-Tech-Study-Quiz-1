@@ -1,0 +1,170 @@
+
+import Peer from "https://esm.sh/peerjs@1.5.4?bundle";
+
+const CLEAN_GOAL=40, RUINED_GOAL=20, ROUND_MS=90000, SAB_COOLDOWN=10000;
+let peer, hostConn, isHost=false, myId="", myName="", roomCode="", joined=false, roleSeen=false;
+let connections=new Map(), state=null, tickTimer=null, spawnTimer=null;
+
+const $=id=>document.getElementById(id);
+const screens=[...document.querySelectorAll(".screen")];
+const show=id=>{screens.forEach(s=>s.classList.remove("active"));$(id).classList.add("active")};
+const msg=(id,t)=>$(id).textContent=t||"";
+const roomPeer=c=>"laundry-sabotage-"+c.toLowerCase();
+const makeCode=()=>Math.random().toString(36).slice(2,7).toUpperCase();
+const cleanName=()=>$("nameInput").value.trim().slice(0,16);
+const me=()=>state?.players?.find(p=>p.id===myId);
+const esc=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+
+function makePeer(id){
+  return new Promise((resolve,reject)=>{
+    peer=new Peer(id,{debug:0});
+    peer.on("open",resolve);
+    peer.on("error",reject);
+  });
+}
+const sendHost=d=>hostConn?.open&&hostConn.send(d);
+function emitState(){ if(!isHost)return; connections.forEach(c=>c.open&&c.send({type:"state",state})); renderState(); }
+
+async function createRoom(){
+  myName=cleanName(); if(!myName)return msg("homeStatus","Enter your name first.");
+  roomCode=makeCode(); myId=roomPeer(roomCode); isHost=true; msg("homeStatus","Opening room...");
+  try{
+    await makePeer(myId);
+    state={status:"lobby",code:roomCode,hostId:myId,players:[{id:myId,name:myName,ready:true}],clean:0,ruined:0,winner:null,saboteurId:null,roundStart:null,item:null,sabReadyAt:0,itemSeq:0};
+    peer.on("connection",acceptConnection); joined=true; enterLobby();
+  }catch(e){ msg("homeStatus","Couldn't create room. Try again."); }
+}
+function acceptConnection(conn){
+  if(state.players.length>=6){ conn.on("open",()=>conn.send({type:"reject",reason:"Room is full."})); return; }
+  connections.set(conn.peer,conn);
+  conn.on("data",d=>handleHostMessage(conn,d));
+  conn.on("close",()=>{connections.delete(conn.peer);state.players=state.players.filter(p=>p.id!==conn.peer);emitState()});
+  conn.on("open",()=>conn.send({type:"hello",hostId:myId,code:roomCode}));
+}
+function handleHostMessage(conn,d){
+  if(!d||typeof d!=="object")return;
+  if(d.type==="join"){
+    if(state.status!=="lobby")return conn.send({type:"reject",reason:"Round already started."});
+    if(!state.players.some(p=>p.id===conn.peer))state.players.push({id:conn.peer,name:String(d.name||"Player").slice(0,16),ready:false});
+    emitState();
+  } else if(d.type==="ready"){
+    const p=state.players.find(p=>p.id===conn.peer); if(p){p.ready=!!d.ready;emitState()}
+  } else if(d.type==="sort") hostSort(conn.peer,d.bin);
+  else if(d.type==="pull") hostPull(conn.peer);
+  else if(d.type==="sabotage") hostSabotage(conn.peer,d.kind);
+}
+async function joinRoom(){
+  myName=cleanName(); roomCode=$("roomInput").value.trim().toUpperCase();
+  if(!myName||roomCode.length<5)return msg("homeStatus","Enter your name and room code.");
+  myId="player-"+crypto.randomUUID(); isHost=false; msg("homeStatus","Joining...");
+  try{
+    await makePeer(myId);
+    hostConn=peer.connect(roomPeer(roomCode),{reliable:true});
+    hostConn.on("open",()=>hostConn.send({type:"join",name:myName}));
+    hostConn.on("data",handleClientMessage);
+    hostConn.on("close",()=>msg("gameStatus","Disconnected from host."));
+    setTimeout(()=>{if(!joined)msg("homeStatus","Could not find that room.");},5000);
+  }catch(e){msg("homeStatus","Connection failed. Try again.");}
+}
+function handleClientMessage(d){
+  if(d.type==="hello"){joined=true;enterLobby()}
+  else if(d.type==="reject"){msg("homeStatus",d.reason||"Couldn't join.");show("home")}
+  else if(d.type==="state"){state=d.state;renderState()}
+}
+function enterLobby(){$("lobbyCode").textContent=roomCode;$("gameCode").textContent=roomCode;show("lobby");renderState()}
+function renderState(){
+  if(!state)return;
+  $("lobbyCode").textContent=state.code;$("gameCode").textContent=state.code;renderPlayers();
+  if(state.status==="playing"&&!roleSeen)showRole();
+  else if(state.status==="playing"&&roleSeen){show("game");renderGame()}
+  else if(state.status==="ended")renderEnd();
+}
+function renderPlayers(){
+  $("lobbyPlayers").innerHTML=state.players.map(p=>'<div class="player-row '+(p.ready?'ready':'')+'"><span>'+esc(p.name)+(p.id===state.hostId?' 👑':'')+'</span><strong>'+(p.ready?'READY':'WAITING')+'</strong></div>').join("");
+  $("startBtn").classList.toggle("hidden",!isHost);
+  const p=me(); if(p)$("readyBtn").textContent=p.ready?"NOT READY":"I'M READY";
+}
+function toggleReady(){
+  const p=me();if(!p)return;
+  if(isHost){p.ready=!p.ready;emitState()}else sendHost({type:"ready",ready:!p.ready});
+}
+function startRound(){
+  if(!isHost)return;
+  if(state.players.length<2)return msg("lobbyStatus","You need at least 2 players.");
+  if(state.players.some(p=>!p.ready))return msg("lobbyStatus","Everyone must be ready.");
+  const sab=state.players[Math.floor(Math.random()*state.players.length)];
+  state.players.forEach(p=>p.role=p.id===sab.id?"saboteur":"crew");
+  Object.assign(state,{saboteurId:sab.id,clean:0,ruined:0,winner:null,roundStart:Date.now(),sabReadyAt:Date.now()+4000,status:"playing",item:null,itemSeq:0});
+  roleSeen=false;emitState();startHostLoops();
+}
+function startHostLoops(){clearInterval(tickTimer);clearInterval(spawnTimer);spawnItem();tickTimer=setInterval(hostTick,250);spawnTimer=setInterval(()=>{if(state.status==="playing"&&!state.item)spawnItem()},650)}
+function randomItem(){
+  const groups={whites:["White Sock 🧦","White Shirt 👕","White Towel","White Sheet"],darks:["Black Sock 🧦","Dark Hoodie","Black Shirt 👕","Dark Jeans 👖"],colors:["Red Sock 🧦","Blue Shirt 👕","Green Towel","Yellow Shorts"]};
+  const types=Object.keys(groups),type=types[Math.floor(Math.random()*types.length)],arr=groups[type];
+  return{id:++state.itemSeq,type,label:arr[Math.floor(Math.random()*arr.length)],contaminated:false,sabotageLabel:"",spawnedAt:Date.now(),expiresAt:Date.now()+6500};
+}
+function spawnItem(){if(!isHost||state.status!=="playing"||state.item)return;state.item=randomItem();emitState()}
+function hostTick(){
+  if(state.status!=="playing")return;
+  if(Date.now()-state.roundStart>=ROUND_MS)return finishByTimer();
+  if(state.item&&Date.now()>=state.item.expiresAt){if(state.item.contaminated)state.ruined++;state.item=null;checkWin();emitState()}
+}
+function hostSort(playerId,bin){
+  if(state.status!=="playing"||!state.item)return;
+  const p=state.players.find(x=>x.id===playerId);if(!p||p.role!=="crew")return;
+  if(state.item.contaminated)state.ruined++;else if(bin===state.item.type)state.clean++;else state.clean=Math.max(0,state.clean-1);
+  state.item=null;checkWin();emitState();
+}
+function hostPull(playerId){
+  if(state.status!=="playing"||!state.item)return;
+  const p=state.players.find(x=>x.id===playerId);if(!p||p.role!=="crew")return;
+  if(!state.item.contaminated)state.clean=Math.max(0,state.clean-1);state.item=null;emitState();
+}
+function hostSabotage(playerId,kind){
+  if(state.status!=="playing"||!state.item||state.item.contaminated||Date.now()<state.sabReadyAt)return;
+  const p=state.players.find(x=>x.id===playerId);if(!p||p.role!=="saboteur")return;
+  const labels={"red-in-whites":"Red sock hidden in WHITES","white-in-darks":"White sock hidden in DARKS","color-in-whites":"Colored shirt hidden in WHITES"};
+  state.item.contaminated=true;state.item.sabotageLabel=labels[kind]||"Mismatched clothing";state.sabReadyAt=Date.now()+SAB_COOLDOWN;emitState();
+}
+function checkWin(){if(state.clean>=CLEAN_GOAL)endGame("crew");else if(state.ruined>=RUINED_GOAL)endGame("saboteur")}
+function finishByTimer(){const a=state.clean/CLEAN_GOAL,b=state.ruined/RUINED_GOAL;endGame(a>b?"crew":b>a?"saboteur":"draw")}
+function endGame(w){state.status="ended";state.winner=w;state.item=null;clearInterval(tickTimer);clearInterval(spawnTimer);emitState()}
+function showRole(){
+  const p=me();if(!p)return;const sab=p.role==="saboteur";
+  $("roleCard").classList.toggle("sab",sab);$("roleIcon").textContent=sab?"🕵️":"🧺";
+  $("roleTitle").textContent=sab?"YOU ARE THE SABOTEUR":"YOU ARE LAUNDRY CREW";
+  $("roleText").textContent=sab?"Secretly contaminate loads. Ruin 20 items before the Crew finishes 40. Your sabotage has a cooldown, so choose your moment.":"Sort each item correctly. If something looks suspicious, pull it before it reaches the washer. Finish 40 clean items before 20 are ruined.";
+  show("role");
+}
+function enterGame(){roleSeen=true;show("game");renderGame()}
+function renderGame(){
+  $("cleanCount").textContent=state.clean;$("ruinedCount").textContent=state.ruined;
+  $("timer").textContent=Math.max(0,Math.ceil((ROUND_MS-(Date.now()-state.roundStart))/1000));
+  const item=state.item,g=$("garment");
+  if(item){g.textContent=item.label;g.classList.remove("empty");g.classList.toggle("suspicious",item.contaminated);$("suspicionBanner").classList.toggle("hidden",!item.contaminated)}
+  else{g.textContent="NEXT LOAD...";g.className="garment empty";$("suspicionBanner").classList.add("hidden")}
+  const sab=me()?.role==="saboteur";$("crewPanel").classList.toggle("hidden",sab);$("saboteurPanel").classList.toggle("hidden",!sab);
+  const cd=Math.max(0,Math.ceil((state.sabReadyAt-Date.now())/1000));$("cooldownText").textContent=cd?"Sabotage cooling down: "+cd+"s":"Sabotage ready.";
+  $("avatars").innerHTML=state.players.map(p=>'<div class="avatar">🧑‍🔧<span>'+esc(p.name)+'</span></div>').join("");
+  $("gamePlayers").innerHTML=state.players.map(p=>'<span class="mini-chip">'+esc(p.name)+(p.id===state.hostId?' 👑':'')+'</span>').join("");
+}
+const doSort=bin=>isHost?hostSort(myId,bin):sendHost({type:"sort",bin});
+const doPull=()=>isHost?hostPull(myId):sendHost({type:"pull"});
+const doSab=kind=>isHost?hostSabotage(myId,kind):sendHost({type:"sabotage",kind});
+function renderEnd(){
+  const sab=state.players.find(p=>p.id===state.saboteurId);
+  $("winnerTitle").textContent=state.winner==="crew"?"THE CREW SAVED THE LAUNDRY!":state.winner==="saboteur"?"THE SABOTEUR RUINED THE LOAD!":"IT'S A DRAW!";
+  $("endScore").textContent="Clean "+state.clean+"/40 • Ruined "+state.ruined+"/20";$("saboteurName").textContent=sab?.name||"Unknown";$("againBtn").classList.toggle("hidden",!isHost);show("end");
+}
+function playAgain(){
+  if(!isHost)return;state.status="lobby";state.players.forEach(p=>{p.ready=p.id===state.hostId;p.role=null});
+  Object.assign(state,{clean:0,ruined:0,winner:null,saboteurId:null,roundStart:null,item:null});roleSeen=false;emitState();
+}
+function leave(){try{peer?.destroy()}catch{}location.reload()}
+
+$("createBtn").onclick=createRoom;$("joinBtn").onclick=joinRoom;$("readyBtn").onclick=toggleReady;$("startBtn").onclick=startRound;
+$("roleReadyBtn").onclick=enterGame;$("pullBtn").onclick=doPull;$("againBtn").onclick=playAgain;$("lobbyHomeBtn").onclick=leave;$("endHomeBtn").onclick=leave;
+document.querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>doSort(b.dataset.sort));
+document.querySelectorAll("[data-sab]").forEach(b=>b.onclick=()=>doSab(b.dataset.sab));
+const dialog=$("rulesDialog");$("rulesBtn").onclick=()=>dialog.showModal();$("closeRulesBtn").onclick=()=>dialog.close();
+setInterval(()=>{if(state?.status==="playing"){renderGame();if(isHost)checkWin()}},250);
