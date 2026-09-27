@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#112238" />
+  <title>Laundry Sabotage</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="home" class="screen active">
+      <div class="hero">
+        <div class="logo-mark">🧺</div>
+        <p class="eyebrow">A SOCIAL SORTING GAME</p>
+        <h1>LAUNDRY<br><span>SABOTAGE</span></h1>
+        <p class="tagline">Sort fast. Watch the load. Trust nobody.</p>
+      </div>
+
+      <div class="home-card">
+        <label>
+          DISPLAY NAME
+          <input id="nameInput" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+        </label>
+
+        <button id="createBtn" class="primary">CREATE ROOM</button>
+
+        <div class="divider"><span>OR</span></div>
+
+        <label>
+          ROOM CODE
+          <input id="roomInput" maxlength="6" placeholder="ABCDE" autocomplete="off" />
+        </label>
+
+        <button id="joinBtn">JOIN ROOM</button>
+        <button id="rulesBtn" class="ghost">HOW TO PLAY</button>
+        <p id="homeStatus" class="status"></p>
+      </div>
+    </section>
+
+    <section id="lobby" class="screen">
+      <div class="topbar">
+        <button id="lobbyHomeBtn" class="tiny ghost">← HOME</button>
+        <div>ROOM <strong id="lobbyCode"></strong></div>
+      </div>
+
+      <div class="lobby-grid">
+        <div class="panel">
+          <p class="eyebrow">WAITING ROOM</p>
+          <h2>WHO'S AT THE LAUNDROMAT?</h2>
+          <div id="lobbyPlayers" class="player-list"></div>
+        </div>
+
+        <div class="panel lobby-actions">
+          <h3>GET READY</h3>
+          <p>2–6 players. One person will secretly become the Saboteur.</p>
+          <button id="readyBtn">I'M READY</button>
+          <button id="startBtn" class="primary hidden">START ROUND</button>
+          <p id="lobbyStatus" class="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="role" class="screen">
+      <div id="roleCard" class="role-card">
+        <p class="eyebrow">YOUR SECRET ROLE</p>
+        <div id="roleIcon" class="role-icon"></div>
+        <h2 id="roleTitle"></h2>
+        <p id="roleText"></p>
+        <button id="roleReadyBtn" class="primary">ENTER LAUNDROMAT</button>
+      </div>
+    </section>
+
+    <section id="game" class="screen game-screen">
+      <header class="hud">
+        <div class="hud-box"><span>ROOM</span><strong id="gameCode"></strong></div>
+        <div class="hud-box timer-box"><span>TIME</span><strong id="timer">90</strong></div>
+        <div class="hud-box clean-box"><span>CLEAN</span><strong><b id="cleanCount">0</b>/40</strong></div>
+        <div class="hud-box ruin-box"><span>RUINED</span><strong><b id="ruinedCount">0</b>/20</strong></div>
+      </header>
+
+      <div class="laundromat-scene">
+        <div class="sign">24 HOUR WASH • DRY • FOLD</div>
+
+        <div class="machine-row">
+          <div class="machine"><div class="door spin">◉</div><small>WHITES</small></div>
+          <div class="machine"><div class="door spin">◉</div><small>DARKS</small></div>
+          <div class="machine"><div class="door spin">◉</div><small>COLORS</small></div>
+          <div class="machine vending">SOAP<br>25¢</div>
+        </div>
+
+        <div class="avatars" id="avatars"></div>
+
+        <div class="belt-wrap">
+          <div class="belt">
+            <div class="belt-lines"></div>
+            <div id="garment" class="garment empty">WAITING...</div>
+          </div>
+          <div class="washer-mouth">WASHER<br>▼</div>
+        </div>
+
+        <div id="suspicionBanner" class="suspicion hidden">⚠ SOMETHING LOOKS OFF — PULL IT!</div>
+      </div>
+
+      <div id="crewPanel" class="control-panel">
+        <p class="control-title">SORT THE ITEM</p>
+        <div class="sort-grid">
+          <button class="sort white" data-sort="whites">WHITES</button>
+          <button class="sort dark" data-sort="darks">DARKS</button>
+          <button class="sort colors" data-sort="colors">COLORS</button>
+          <button id="pullBtn" class="pull">PULL ITEM</button>
+        </div>
+      </div>
+
+      <div id="saboteurPanel" class="control-panel hidden">
+        <p class="control-title red-text">SABOTEUR TOOLKIT — KEEP IT QUIET</p>
+        <div class="sab-grid">
+          <button data-sab="red-in-whites">🧦 RED SOCK → WHITES</button>
+          <button data-sab="white-in-darks">🧦 WHITE SOCK → DARKS</button>
+          <button data-sab="color-in-whites">👕 COLOR → WHITES</button>
+        </div>
+        <p id="cooldownText">Sabotage ready.</p>
+      </div>
+
+      <div class="game-footer">
+        <div id="gamePlayers" class="mini-players"></div>
+        <p id="gameStatus" class="status"></p>
+      </div>
+    </section>
+
+    <section id="end" class="screen">
+      <div class="end-card">
+        <p class="eyebrow">ROUND OVER</p>
+        <h2 id="winnerTitle"></h2>
+        <p id="endScore"></p>
+        <div class="reveal">
+          THE SABOTEUR WAS
+          <strong id="saboteurName"></strong>
+        </div>
+        <button id="againBtn" class="primary hidden">PLAY AGAIN</button>
+        <button id="endHomeBtn" class="ghost">LEAVE ROOM</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="rulesDialog">
+    <div class="rules-head">
+      <div class="logo-mark small">🧺</div>
+      <div>
+        <p class="eyebrow">LAUNDRY SABOTAGE</p>
+        <h2>HOW TO PLAY</h2>
+      </div>
+    </div>
+    <ol>
+      <li><strong>Crew:</strong> Sort whites, darks and colors into the matching loads.</li>
+      <li><strong>Saboteur:</strong> Secretly slip mismatched clothing into the laundry.</li>
+      <li>Crew players can <strong>Pull Item</strong> if something looks suspicious.</li>
+      <li>Crew wins by finishing <strong>40 clean items</strong>.</li>
+      <li>Saboteur wins by ruining <strong>20 items</strong>.</li>
+      <li>The round lasts <strong>90 seconds</strong>. If time expires, the side with the higher percentage of its goal wins.</li>
+      <li>Your role is secret until the round ends.</li>
+    </ol>
+    <button id="closeRulesBtn" class="primary">GOT IT</button>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
