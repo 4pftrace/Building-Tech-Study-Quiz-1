@@ -60,7 +60,7 @@ async function createRoom(){
   roomCode=makeCode(); myId=roomPeer(roomCode); isHost=true; msg("homeStatus","Opening room...");
   try{
     await makePeer(myId);
-    state={status:"lobby",code:roomCode,hostId:myId,players:[{id:myId,name:myName,ready:true}],clean:0,ruined:0,winner:null,saboteurId:null,roundStart:null,item:null,sabReadyAt:0,itemSeq:0};
+    state={status:"lobby",code:roomCode,hostId:myId,players:[{id:myId,name:myName,ready:true}],clean:0,ruined:0,ruinedItems:[],winner:null,saboteurId:null,roundStart:null,item:null,sabReadyAt:0,itemSeq:0};
     peer.on("connection",acceptConnection); joined=true; enterLobby();
   }catch(e){ msg("homeStatus","Couldn't create room. Try again."); }
 }
@@ -163,7 +163,7 @@ function startRound(){
   if(state.players.some(p=>!p.ready))return msg("lobbyStatus","Everyone must be ready.");
   const sab=state.players[Math.floor(Math.random()*state.players.length)];
   state.players.forEach(p=>p.role=p.id===sab.id?"saboteur":"crew");
-  Object.assign(state,{saboteurId:sab.id,clean:0,ruined:0,winner:null,roundStart:Date.now(),sabReadyAt:Date.now()+4000,status:"playing",item:null,itemSeq:0});
+  Object.assign(state,{saboteurId:sab.id,clean:0,ruined:0,ruinedItems:[],winner:null,roundStart:Date.now(),sabReadyAt:Date.now()+5000,status:"playing",item:null,itemSeq:0});
   roleSeen=false;emitState();startHostLoops();
 }
 function startHostLoops(){
@@ -176,18 +176,29 @@ function startHostLoops(){
 function randomItem(){
   const groups={whites:["White Sock 🧦","White Shirt 👕","White Towel","White Sheet"],darks:["Black Sock 🧦","Dark Hoodie","Black Shirt 👕","Dark Jeans 👖"],colors:["Red Sock 🧦","Blue Shirt 👕","Green Towel","Yellow Shorts"]};
   const types=Object.keys(groups),type=types[Math.floor(Math.random()*types.length)],arr=groups[type];
-  return{id:++state.itemSeq,type,label:arr[Math.floor(Math.random()*arr.length)],contaminated:false,sabotageLabel:"",spawnedAt:Date.now(),expiresAt:Date.now()+6500};
+  return{id:++state.itemSeq,type,label:arr[Math.floor(Math.random()*arr.length)],baseLabel:null,contaminated:false,sabotageLabel:"",spawnedAt:Date.now(),expiresAt:Date.now()+12000};
 }
 function spawnItem(){if(!isHost||state.status!=="playing"||state.item)return;state.item=randomItem();emitState()}
 function hostTick(){
   if(state.status!=="playing")return;
   if(Date.now()-state.roundStart>=ROUND_MS)return finishByTimer();
-  if(state.item&&Date.now()>=state.item.expiresAt){if(state.item.contaminated)state.ruined++;state.item=null;checkWin();emitState()}
+  if(state.item&&Date.now()>=state.item.expiresAt){
+    if(state.item.contaminated){
+      state.ruined++;
+      state.ruinedItems=state.ruinedItems||[];
+      state.ruinedItems.push(state.item.sabotageLabel||state.item.label||"Ruined item");
+    }
+    state.item=null;checkWin();emitState()
+  }
 }
 function hostSort(playerId,bin){
   if(state.status!=="playing"||!state.item)return;
   const p=state.players.find(x=>x.id===playerId);if(!p||p.role!=="crew")return;
-  if(state.item.contaminated)state.ruined++;else if(bin===state.item.type)state.clean++;else state.clean=Math.max(0,state.clean-1);
+  if(state.item.contaminated){
+    state.ruined++;
+    state.ruinedItems=state.ruinedItems||[];
+    state.ruinedItems.push(state.item.sabotageLabel||state.item.label||"Ruined item");
+  }else if(bin===state.item.type)state.clean++;else state.clean=Math.max(0,state.clean-1);
   state.item=null;checkWin();emitState();
 }
 function hostPull(playerId){
@@ -199,7 +210,15 @@ function hostSabotage(playerId,kind){
   if(state.status!=="playing"||!state.item||state.item.contaminated||Date.now()<state.sabReadyAt)return;
   const p=state.players.find(x=>x.id===playerId);if(!p||p.role!=="saboteur")return;
   const labels={"red-in-whites":"Red sock hidden in WHITES","white-in-darks":"White sock hidden in DARKS","color-in-whites":"Colored shirt hidden in WHITES"};
-  state.item.contaminated=true;state.item.sabotageLabel=labels[kind]||"Mismatched clothing";state.sabReadyAt=Date.now()+SAB_COOLDOWN;emitState();
+  state.item.baseLabel=state.item.baseLabel||state.item.label;
+  state.item.contaminated=true;
+  state.item.sabotageLabel=labels[kind]||"Mismatched clothing";
+  if(kind==="red-in-whites")state.item.label=state.item.baseLabel+" + RED SOCK 🧦";
+  else if(kind==="white-in-darks")state.item.label=state.item.baseLabel+" + WHITE SOCK 🧦";
+  else if(kind==="color-in-whites")state.item.label=state.item.baseLabel+" + COLOR SHIRT 👕";
+  state.sabReadyAt=Date.now()+SAB_COOLDOWN;
+  msg("gameStatus","Sabotage planted — if Crew misses it, it will be ruined at the washer.");
+  emitState();
 }
 function checkWin(){if(state.clean>=CLEAN_GOAL)endGame("crew");else if(state.ruined>=RUINED_GOAL)endGame("saboteur")}
 function finishByTimer(){const a=state.clean/CLEAN_GOAL,b=state.ruined/RUINED_GOAL;endGame(a>b?"crew":b>a?"saboteur":"draw")}
@@ -226,6 +245,11 @@ function renderGame(){
   const cd=Math.max(0,Math.ceil((state.sabReadyAt-Date.now())/1000));$("cooldownText").textContent=cd?"Sabotage cooling down: "+cd+"s":"Sabotage ready.";
   $("avatars").innerHTML=state.players.map(p=>'<div class="avatar">🧑‍🔧<span>'+esc(p.name)+'</span></div>').join("");
   $("gamePlayers").innerHTML=state.players.map(p=>'<span class="mini-chip">'+esc(p.name)+(p.id===state.hostId?' 👑':'')+'</span>').join("");
+  const ruinedItems=state.ruinedItems||[];
+  $("ruinedListCount").textContent=ruinedItems.length+" item"+(ruinedItems.length===1?"":"s");
+  $("ruinedList").innerHTML=ruinedItems.length
+    ? ruinedItems.slice(-12).map(x=>'<span class="ruined-chip">'+esc(x)+'</span>').join("")
+    : '<span class="ruined-empty">Nothing ruined yet.</span>';
 }
 const doSort=bin=>isHost?hostSort(myId,bin):sendHost({type:"sort",bin});
 const doPull=()=>isHost?hostPull(myId):sendHost({type:"pull"});
@@ -242,7 +266,7 @@ function playAgain(){
     return;
   }
   state.status="lobby";state.players.forEach(p=>{p.ready=p.id===state.hostId;p.role=null});
-  Object.assign(state,{clean:0,ruined:0,winner:null,saboteurId:null,roundStart:null,item:null});roleSeen=false;emitState();
+  Object.assign(state,{clean:0,ruined:0,ruinedItems:[],winner:null,saboteurId:null,roundStart:null,item:null});roleSeen=false;emitState();
 }
 function leave(){try{peer?.destroy()}catch{}location.reload()}
 
@@ -294,6 +318,7 @@ function startDemo(){
     ],
     clean:0,
     ruined:0,
+    ruinedItems:[],
     winner:null,
     saboteurId:playerRole==="saboteur"?myId:"bot-player",
     roundStart:Date.now(),
@@ -315,20 +340,20 @@ function startBotLoop(){
     if(!bot)return;
 
     if(bot.role==="saboteur"){
-      if(state.item && !state.item.contaminated && Date.now()>=state.sabReadyAt && Math.random()<0.35){
+      if(state.item && !state.item.contaminated && Date.now()>=state.sabReadyAt && Date.now()-state.item.spawnedAt>3500 && Math.random()<0.28){
         const kinds=["red-in-whites","white-in-darks","color-in-whites"];
         hostSabotage("bot-player",kinds[Math.floor(Math.random()*kinds.length)]);
       }
     }else{
       if(!state.item)return;
       const age=Date.now()-state.item.spawnedAt;
-      if(age<1200)return;
+      if(age<3000)return;
 
       if(state.item.contaminated){
-        if(Math.random()<0.65){
+        if(Math.random()<0.38){
           hostPull("bot-player");
         }
-      }else if(Math.random()<0.75){
+      }else if(Math.random()<0.55){
         const correct=Math.random()<0.88;
         let bin=state.item.type;
         if(!correct){
@@ -338,7 +363,7 @@ function startBotLoop(){
         hostSort("bot-player",bin);
       }
     }
-  },900);
+  },1800);
 }
 
 $("demoBtn").onclick=startDemo;
