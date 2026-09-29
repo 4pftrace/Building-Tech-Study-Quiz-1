@@ -17,9 +17,32 @@ const esc=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 
 function makePeer(id){
   return new Promise((resolve,reject)=>{
-    peer=new Peer(id,{debug:0});
-    peer.on("open",resolve);
-    peer.on("error",reject);
+    peer=new Peer(id,{
+      host:"0.peerjs.com",
+      port:443,
+      path:"/",
+      secure:true,
+      debug:1,
+      config:{
+        iceServers:[
+          {urls:"stun:stun.l.google.com:19302"},
+          {urls:"stun:stun1.l.google.com:19302"}
+        ]
+      }
+    });
+    const timeout=setTimeout(()=>reject(new Error("Peer server timeout")),10000);
+    peer.on("open",()=>{clearTimeout(timeout);resolve()});
+    peer.on("error",err=>{
+      console.error("Peer error:",err);
+      if(err?.type==="peer-unavailable"){
+        msg("homeStatus","Room not found. Check the code and make sure the host still has the game open.");
+      }else if(err?.type==="unavailable-id"){
+        msg("homeStatus","That room code is already in use. Try creating another room.");
+      }else{
+        msg("homeStatus","Network connection error. Try again or switch networks.");
+      }
+      reject(err);
+    });
   });
 }
 const sendHost=d=>hostConn?.open&&hostConn.send(d);
@@ -35,11 +58,19 @@ async function createRoom(){
   }catch(e){ msg("homeStatus","Couldn't create room. Try again."); }
 }
 function acceptConnection(conn){
-  if(state.players.length>=6){ conn.on("open",()=>conn.send({type:"reject",reason:"Room is full."})); return; }
+  const sendHello=()=>{
+    if(state.players.length>=6){
+      conn.send({type:"reject",reason:"Room is full."});
+      setTimeout(()=>conn.close(),250);
+      return;
+    }
+    conn.send({type:"hello",hostId:myId,code:roomCode});
+  };
   connections.set(conn.peer,conn);
   conn.on("data",d=>handleHostMessage(conn,d));
   conn.on("close",()=>{connections.delete(conn.peer);state.players=state.players.filter(p=>p.id!==conn.peer);emitState()});
-  conn.on("open",()=>conn.send({type:"hello",hostId:myId,code:roomCode}));
+  conn.on("error",err=>console.error("Incoming connection error:",err));
+  if(conn.open) sendHello(); else conn.on("open",sendHello);
 }
 function handleHostMessage(conn,d){
   if(!d||typeof d!=="object")return;
@@ -59,17 +90,48 @@ async function joinRoom(){
   myId="player-"+crypto.randomUUID(); isHost=false; msg("homeStatus","Joining...");
   try{
     await makePeer(myId);
-    hostConn=peer.connect(roomPeer(roomCode),{reliable:true});
-    hostConn.on("open",()=>hostConn.send({type:"join",name:myName}));
+    hostConn=peer.connect(roomPeer(roomCode),{reliable:true,serialization:"json"});
     hostConn.on("data",handleClientMessage);
-    hostConn.on("close",()=>msg("gameStatus","Disconnected from host."));
-    setTimeout(()=>{if(!joined)msg("homeStatus","Could not find that room.");},5000);
+    hostConn.on("open",()=>{
+      msg("homeStatus","Connected — joining room...");
+      hostConn.send({type:"join",name:myName});
+    });
+    hostConn.on("error",err=>{
+      console.error("Host connection error:",err);
+      msg("homeStatus","Could not connect to that room. Make sure the host is still on the lobby screen.");
+    });
+    hostConn.on("close",()=>{
+      if(joined) msg("gameStatus","Disconnected from host.");
+      else msg("homeStatus","Connection closed before joining.");
+    });
+    setTimeout(()=>{
+      if(!joined){
+        msg("homeStatus","Could not join. Re-check the room code and keep the host's tab open.");
+        try{hostConn.close()}catch{}
+      }
+    },10000);
   }catch(e){msg("homeStatus","Connection failed. Try again.");}
 }
 function handleClientMessage(d){
-  if(d.type==="hello"){joined=true;enterLobby()}
-  else if(d.type==="reject"){msg("homeStatus",d.reason||"Couldn't join.");show("home")}
-  else if(d.type==="state"){state=d.state;renderState()}
+  if(!d||typeof d!=="object")return;
+  if(d.type==="hello"){
+    joined=true;
+    roomCode=d.code||roomCode;
+    enterLobby();
+  }
+  else if(d.type==="reject"){
+    msg("homeStatus",d.reason||"Couldn't join.");
+    show("home");
+  }
+  else if(d.type==="state"){
+    state=d.state;
+    if(!joined){
+      joined=true;
+      roomCode=state.code||roomCode;
+      enterLobby();
+    }
+    renderState();
+  }
 }
 function enterLobby(){$("lobbyCode").textContent=roomCode;$("gameCode").textContent=roomCode;show("lobby");renderState()}
 function renderState(){
