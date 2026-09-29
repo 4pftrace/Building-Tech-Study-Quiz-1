@@ -2,7 +2,7 @@
 import Peer from "https://esm.sh/peerjs@1.5.4?bundle";
 
 const CLEAN_GOAL=40, RUINED_GOAL=20, ROUND_MS=90000, SAB_COOLDOWN=10000;
-let peer, hostConn, isHost=false, myId="", myName="", roomCode="", joined=false, roleSeen=false;
+let peer, hostConn, isHost=false, myId="", myName="", roomCode="", joined=false, roleSeen=false, demoMode=false, botTimer=null;
 let connections=new Map(), state=null, tickTimer=null, spawnTimer=null;
 
 const $=id=>document.getElementById(id);
@@ -166,7 +166,13 @@ function startRound(){
   Object.assign(state,{saboteurId:sab.id,clean:0,ruined:0,winner:null,roundStart:Date.now(),sabReadyAt:Date.now()+4000,status:"playing",item:null,itemSeq:0});
   roleSeen=false;emitState();startHostLoops();
 }
-function startHostLoops(){clearInterval(tickTimer);clearInterval(spawnTimer);spawnItem();tickTimer=setInterval(hostTick,250);spawnTimer=setInterval(()=>{if(state.status==="playing"&&!state.item)spawnItem()},650)}
+function startHostLoops(){
+  clearInterval(tickTimer);clearInterval(spawnTimer);clearInterval(botTimer);
+  spawnItem();
+  tickTimer=setInterval(hostTick,250);
+  spawnTimer=setInterval(()=>{if(state.status==="playing"&&!state.item)spawnItem()},650);
+  if(demoMode)startBotLoop();
+}
 function randomItem(){
   const groups={whites:["White Sock 🧦","White Shirt 👕","White Towel","White Sheet"],darks:["Black Sock 🧦","Dark Hoodie","Black Shirt 👕","Dark Jeans 👖"],colors:["Red Sock 🧦","Blue Shirt 👕","Green Towel","Yellow Shorts"]};
   const types=Object.keys(groups),type=types[Math.floor(Math.random()*types.length)],arr=groups[type];
@@ -197,7 +203,11 @@ function hostSabotage(playerId,kind){
 }
 function checkWin(){if(state.clean>=CLEAN_GOAL)endGame("crew");else if(state.ruined>=RUINED_GOAL)endGame("saboteur")}
 function finishByTimer(){const a=state.clean/CLEAN_GOAL,b=state.ruined/RUINED_GOAL;endGame(a>b?"crew":b>a?"saboteur":"draw")}
-function endGame(w){state.status="ended";state.winner=w;state.item=null;clearInterval(tickTimer);clearInterval(spawnTimer);emitState()}
+function endGame(w){
+  state.status="ended";state.winner=w;state.item=null;
+  clearInterval(tickTimer);clearInterval(spawnTimer);clearInterval(botTimer);
+  emitState();
+}
 function showRole(){
   const p=me();if(!p)return;const sab=p.role==="saboteur";
   $("roleCard").classList.toggle("sab",sab);$("roleIcon").textContent=sab?"🕵️":"🧺";
@@ -226,7 +236,12 @@ function renderEnd(){
   $("endScore").textContent="Clean "+state.clean+"/40 • Ruined "+state.ruined+"/20";$("saboteurName").textContent=sab?.name||"Unknown";$("againBtn").classList.toggle("hidden",!isHost);show("end");
 }
 function playAgain(){
-  if(!isHost)return;state.status="lobby";state.players.forEach(p=>{p.ready=p.id===state.hostId;p.role=null});
+  if(!isHost)return;
+  if(demoMode){
+    startDemo();
+    return;
+  }
+  state.status="lobby";state.players.forEach(p=>{p.ready=p.id===state.hostId;p.role=null});
   Object.assign(state,{clean:0,ruined:0,winner:null,saboteurId:null,roundStart:null,item:null});roleSeen=false;emitState();
 }
 function leave(){try{peer?.destroy()}catch{}location.reload()}
@@ -258,3 +273,72 @@ $("copyInviteBtn").onclick=async()=>{
     msg("lobbyStatus","Invite: "+url.toString());
   }
 };
+
+
+function startDemo(){
+  myName=cleanName()||"You";
+  demoMode=true;
+  isHost=true;
+  joined=true;
+  roomCode="DEMO";
+  myId="demo-player";
+  const playerRole=Math.random()<0.5?"crew":"saboteur";
+  const botRole=playerRole==="crew"?"saboteur":"crew";
+  state={
+    status:"playing",
+    code:"DEMO",
+    hostId:myId,
+    players:[
+      {id:myId,name:myName,ready:true,role:playerRole},
+      {id:"bot-player",name:"Laundry Bot",ready:true,role:botRole}
+    ],
+    clean:0,
+    ruined:0,
+    winner:null,
+    saboteurId:playerRole==="saboteur"?myId:"bot-player",
+    roundStart:Date.now(),
+    item:null,
+    sabReadyAt:Date.now()+3000,
+    itemSeq:0
+  };
+  roleSeen=false;
+  $("gameCode").textContent="DEMO";
+  showRole();
+  startHostLoops();
+}
+
+function startBotLoop(){
+  clearInterval(botTimer);
+  botTimer=setInterval(()=>{
+    if(!demoMode||!state||state.status!=="playing")return;
+    const bot=state.players.find(p=>p.id==="bot-player");
+    if(!bot)return;
+
+    if(bot.role==="saboteur"){
+      if(state.item && !state.item.contaminated && Date.now()>=state.sabReadyAt && Math.random()<0.35){
+        const kinds=["red-in-whites","white-in-darks","color-in-whites"];
+        hostSabotage("bot-player",kinds[Math.floor(Math.random()*kinds.length)]);
+      }
+    }else{
+      if(!state.item)return;
+      const age=Date.now()-state.item.spawnedAt;
+      if(age<1200)return;
+
+      if(state.item.contaminated){
+        if(Math.random()<0.65){
+          hostPull("bot-player");
+        }
+      }else if(Math.random()<0.75){
+        const correct=Math.random()<0.88;
+        let bin=state.item.type;
+        if(!correct){
+          const bins=["whites","darks","colors"].filter(x=>x!==state.item.type);
+          bin=bins[Math.floor(Math.random()*bins.length)];
+        }
+        hostSort("bot-player",bin);
+      }
+    }
+  },900);
+}
+
+$("demoBtn").onclick=startDemo;
