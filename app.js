@@ -246,3 +246,15 @@ if(inviteRoom){
 $("roomInput").addEventListener("input",e=>{
   e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5);
 });
+
+$("copyInviteBtn").onclick=async()=>{
+  if(!state?.code)return;
+  const url=new URL(location.href);
+  url.searchParams.set("room",state.code);
+  try{
+    await navigator.clipboard.writeText(url.toString());
+    msg("lobbyStatus","Invite link copied!");
+  }catch{
+    msg("lobbyStatus","Invite: "+url.toString());
+  }
+};
