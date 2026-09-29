@@ -76,3 +76,33 @@ dialog::backdrop{background:rgba(0,0,0,.75)}.rules-head{display:flex;align-items
   .machine-row{grid-template-columns:repeat(2,1fr)}.sort-grid{grid-template-columns:repeat(2,1fr)}.sab-grid{grid-template-columns:1fr}
   .belt-wrap{grid-template-columns:1fr 75px}.garment{left:18%;min-width:160px}.game-footer{flex-direction:column}
 }
+.ruined-panel{
+  width:min(1050px,100%);
+  margin-top:14px;
+  background:#2b171b;
+  border:3px solid var(--shadow);
+  padding:12px;
+}
+.ruined-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  color:#ffb0aa;
+  font-weight:900;
+  letter-spacing:.06em;
+  margin-bottom:8px;
+}
+.ruined-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  min-height:34px;
+}
+.ruined-chip{
+  background:#531f28;
+  color:white;
+  border:2px solid #8d3b45;
+  padding:6px 8px;
+  font-size:.78rem;
+}
+.ruined-empty{opacity:.7;font-size:.8rem}
