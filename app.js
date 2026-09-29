@@ -10,38 +10,45 @@ const screens=[...document.querySelectorAll(".screen")];
 const show=id=>{screens.forEach(s=>s.classList.remove("active"));$(id).classList.add("active")};
 const msg=(id,t)=>$(id).textContent=t||"";
 const roomPeer=c=>"laundry-sabotage-"+c.toLowerCase();
-const makeCode=()=>Math.random().toString(36).slice(2,7).toUpperCase();
+const makeCode=()=>{
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out="";
+  for(let i=0;i<5;i++)out+=chars[Math.floor(Math.random()*chars.length)];
+  return out;
+};
 const cleanName=()=>$("nameInput").value.trim().slice(0,16);
 const me=()=>state?.players?.find(p=>p.id===myId);
 const esc=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 
 function makePeer(id){
   return new Promise((resolve,reject)=>{
-    peer=new Peer(id,{
-      host:"0.peerjs.com",
-      port:443,
-      path:"/",
-      secure:true,
-      debug:1,
-      config:{
-        iceServers:[
-          {urls:"stun:stun.l.google.com:19302"},
-          {urls:"stun:stun1.l.google.com:19302"}
-        ]
+    // Let PeerJS use its official cloud defaults. Explicitly overriding the
+    // cloud host can make discovery less reliable across browser/network types.
+    peer=new Peer(id,{debug:2});
+    const timeout=setTimeout(()=>reject(new Error("Peer server timeout")),12000);
+    let opened=false;
+    peer.on("open",()=>{
+      opened=true;
+      clearTimeout(timeout);
+      resolve();
+    });
+    peer.on("disconnected",()=>{
+      if(!peer.destroyed){
+        try{peer.reconnect()}catch{}
       }
     });
-    const timeout=setTimeout(()=>reject(new Error("Peer server timeout")),10000);
-    peer.on("open",()=>{clearTimeout(timeout);resolve()});
     peer.on("error",err=>{
       console.error("Peer error:",err);
       if(err?.type==="peer-unavailable"){
-        msg("homeStatus","Room not found. Check the code and make sure the host still has the game open.");
+        msg("homeStatus","Room not found. Make sure the host still has the room open and check the 5-character code.");
       }else if(err?.type==="unavailable-id"){
-        msg("homeStatus","That room code is already in use. Try creating another room.");
-      }else{
-        msg("homeStatus","Network connection error. Try again or switch networks.");
+        msg("homeStatus","That room code is already active. Create a new room.");
+      }else if(err?.type==="network"||err?.type==="server-error"||err?.type==="socket-error"){
+        msg("homeStatus","Could not reach the multiplayer service. Try Wi-Fi/cellular again.");
+      }else if(err?.type==="webrtc"){
+        msg("homeStatus","This network blocked the direct game connection. Try another Wi-Fi or cellular connection.");
       }
-      reject(err);
+      if(!opened)reject(err);
     });
   });
 }
@@ -85,7 +92,7 @@ function handleHostMessage(conn,d){
   else if(d.type==="sabotage") hostSabotage(conn.peer,d.kind);
 }
 async function joinRoom(){
-  myName=cleanName(); roomCode=$("roomInput").value.trim().toUpperCase();
+  myName=cleanName(); roomCode=$("roomInput").value.trim().toUpperCase().replace(/[^A-Z0-9]/g,"");
   if(!myName||roomCode.length<5)return msg("homeStatus","Enter your name and room code.");
   myId="player-"+crypto.randomUUID(); isHost=false; msg("homeStatus","Joining...");
   try{
@@ -230,3 +237,12 @@ document.querySelectorAll("[data-sort]").forEach(b=>b.onclick=()=>doSort(b.datas
 document.querySelectorAll("[data-sab]").forEach(b=>b.onclick=()=>doSab(b.dataset.sab));
 const dialog=$("rulesDialog");$("rulesBtn").onclick=()=>dialog.showModal();$("closeRulesBtn").onclick=()=>dialog.close();
 setInterval(()=>{if(state?.status==="playing"){renderGame();if(isHost)checkWin()}},250);
+
+const params=new URLSearchParams(location.search);
+const inviteRoom=params.get("room");
+if(inviteRoom){
+  $("roomInput").value=inviteRoom.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5);
+}
+$("roomInput").addEventListener("input",e=>{
+  e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,5);
+});
